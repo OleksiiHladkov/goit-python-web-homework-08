@@ -1,3 +1,5 @@
+from mongoengine import ValidationError
+
 import json
 from pathlib import Path
 from datetime import datetime
@@ -34,5 +36,9 @@ def insert_quotes():
 
 
 if __name__ == "__main__":
-    insert_authors()
-    insert_quotes()
+    try:
+        insert_authors()
+        insert_quotes()
+    except ValidationError as err:
+        print(err)
+

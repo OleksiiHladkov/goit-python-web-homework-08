@@ -1,4 +1,5 @@
 from models import Author, Quotes
+import connect
 
 
 def parcing_data(data: str):
@@ -14,12 +15,27 @@ def parcing_data(data: str):
     return result
 
 
+def process_objects(objects: list) -> str:
+    result = []
+
+    for object in objects:
+        author_fullname = object.author.fullname
+        quote_dict = object.to_mongo().to_dict()
+        tags = ", ".join(quote_dict.get("tags"))
+        quote = quote_dict.get("qoute")
+        result.append(f"\nAuthor: {author_fullname}\nTags: {tags}\nQoute: {quote}\n")
+
+    return "\n".join(result)
+
+
 def input_error(handler_func):
     def inner_func(**kwargs):
         try:
             result = handler_func(**kwargs)
         except KeyError as key:
             result = f"Search is not possible: {key} is not found"
+        except IndexError:
+            result = f"Values sequence index out of range"
 
         return result
 
@@ -28,26 +44,46 @@ def input_error(handler_func):
 
 @input_error
 def search_by_name(**kwargs):
-    return kwargs["value"]
+    fullname = kwargs["value"][0]
+    author = Author.objects(fullname=fullname).first()
+    quotes = Quotes.objects(author=author)
+    result = process_objects(quotes)
+    return result
+
+
+@input_error
+def search_by_names(**kwargs):
+    fullnames = kwargs["value"]
+    authors = Author.objects(fullname__in=fullnames)
+    quotes = Quotes.objects(author__in=authors)
+    result = process_objects(quotes)
+    return result
 
 
 @input_error
 def search_by_tag(**kwargs):
-    pass
+    tag = kwargs["value"][0]
+    quotes = Quotes.objects(tags=tag)
+    result = process_objects(quotes)
+    return result
 
 
 @input_error
 def search_by_tags(**kwargs):
-    pass
+    tags = kwargs["value"]
+    quotes = Quotes.objects(tags__in=tags)
+    result = process_objects(quotes)
+    return result
 
 
 @input_error
 def end_of_search(**kwargs):
-    return "The end of search. Thank you for using! Bye!"
+    return "The end of search. Thank you for using \"quotation_book\"! Bye!"
 
 
 COMMANDS = {
     "name": search_by_name,
+    "names": search_by_names,
     "tag": search_by_tag,
     "tags": search_by_tags,
     "exit": end_of_search,
@@ -58,33 +94,39 @@ def get_handler(command: str):
     return COMMANDS.get(command.lower())
 
 
-def main():
-    while True:
-        user_input = input("Enter your command: ")
+def main(command_dict:dict) -> bytes:
+    command = command_dict.get("command", "")
+    handler = get_handler(command)
 
-        command_dict = parcing_data(user_input)
+    if handler:
+        return handler(**command_dict).encode(encoding="utf-8")
 
-        command = command_dict.get("command", "")
-
-        if command:
-            handler = get_handler(command)
-
-            if handler:
-                result = handler(**command_dict)
-
-                if command == "exit":
-                    print(result, "\n")
-                    break
-
-                print(result, "\n")
-                continue
-
-        # if "while" not break or not continue - is bad command
-        print("Can not recognize a command! Please, try again.", "\n")
+    bad_message = "Can not recognize a command! Please, try again."
+    return bad_message.encode(encoding="utf-8")
 
 
 if __name__ == "__main__":
+    # output info
     print(
-        "\nInfo:\nCommand format: [command]: [value[1],value[2],...,value[n]]\nAvailable commands: 'name', 'tag', 'tags'\nFor exit enter 'exit'.\n"
+        """\nInfo:
+        Command format: [command]: [value[1],value[2],...,value[n]]
+        Available commands: 'name', 'names', 'tag', 'tags'
+        For exit enter 'exit'.\n"""
     )
-    main()
+   
+    # output result
+    while True:
+        user_input = input("\nEnter your command: ")
+
+        command_dict = parcing_data(user_input)
+        command = command_dict.get("command", "")
+
+        if command:
+            result = main(command_dict).decode()
+
+            if command == "exit":
+                print(result)
+                break
+
+            output = f"Result:\n{result if result else "nothing find"}"
+            print(output)
